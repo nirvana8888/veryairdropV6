@@ -33,7 +33,7 @@
     <!-- Load ethers.js from jsDelivr -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script>
-        const contractAddress = "0x39abbd8be6205a4a5a7671a7424c743851c9a2e9"; // Replace with your deployed contract address
+        const contractAddress = "0xYourContractAddress"; // Replace with your deployed contract address
         const contractABI = [
             {
                 "inputs": [
@@ -61,8 +61,8 @@
 
                     // Define Very Network
                     const veryNetwork = {
-                        chainId: 4613,
-                        name: "Very Network",
+                        chainId: '0x1201', // 4613 in hex
+                        chainName: "Very Network",
                         rpcUrls: ["https://rpc.verylabs.io"],
                         nativeCurrency: {
                             name: "VERY",
@@ -72,25 +72,23 @@
                         blockExplorerUrls: ["https://www.veryscan.io"]
                     };
 
-                    // Switch to Very Network (if not already on it)
+                    // Switch to Very Network
                     await window.ethereum.request({
                         method: 'wallet_switchEthereumChain',
-                        params: [{ chainId: '0x1201' }] // 4613 in hex
+                        params: [{ chainId: veryNetwork.chainId }]
                     }).catch(async (switchError) => {
-                        if (switchError.code === 4902) {
-                            // Network not added to MetaMask, add it
+                        if (switchError.code === 4902) { // Network not found
                             await window.ethereum.request({
                                 method: 'wallet_addEthereumChain',
                                 params: [veryNetwork]
                             });
+                        } else {
+                            throw switchError;
                         }
                     });
 
-                    // Create provider with explicit network
-                    provider = new ethers.providers.Web3Provider(window.ethereum, {
-                        chainId: 4613,
-                        name: "very"
-                    });
+                    // Initialize provider without network object
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
                     signer = provider.getSigner();
                     contract = new ethers.Contract(contractAddress, contractABI, signer);
 
