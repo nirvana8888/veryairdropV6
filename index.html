@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Very Network Multisender</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+        button { padding: 10px 20px; margin: 5px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+        textarea { width: 80%; height: 100px; margin: 10px 0; }
+        #status { color: green; margin-top: 10px; }
+        #error { color: red; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Very Network Multisender</h1>
+    <p>Connect your wallet and send $VERY to multiple addresses!</p>
+
+    <button id="connectButton" onclick="connectWallet()">Connect Wallet</button>
+    <p>Connected Address: <span id="account">Not connected</span></p>
+
+    <h3>Enter Recipients and Amounts</h3>
+    <p>Format: address,amount (in VERY, one per line)<br>Example: 0x123...abc,1.5</p>
+    <textarea id="recipientsInput" placeholder="0xAddress1,1.5
+0xAddress2,2.0"></textarea>
+    <br>
+    <button onclick="sendVery()">Send $VERY</button>
+
+    <p id="status"></p>
+    <p id="error"></p>
+
+    <!-- Load ethers.js from jsDelivr -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+        const contractAddress = "0xYourContractAddress"; // Replace with your deployed contract address
+        const contractABI = [
+            {
+                "inputs": [
+                    {"internalType": "address payable[]", "name": "recipients", "type": "address[]"},
+                    {"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}
+                ],
+                "name": "multiSend",
+                "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+                "stateMutability": "payable",
+                "type": "function"
+            },
+            {"anonymous": false, "inputs": [
+                {"indexed": true, "internalType": "address", "name": "to", "type": "address"},
+                {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"}
+            ], "name": "Sent", "type": "event"}
+        ];
+
+        let provider, signer, contract;
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    // Request wallet connection
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+                    const account = await signer.getAddress();
+                    document.getElementById('account').innerText = account;
+                    document.getElementById('status').innerText = "Wallet connected!";
+                    document.getElementById('error').innerText = "";
+                } catch (error) {
+                    document.getElementById('error').innerText = "Connection failed: " + error.message;
+                }
+            } else {
+                document.getElementById('error').innerText = "Please install MetaMask!";
+            }
+        }
+
+        async function sendVery() {
+            const input = document.getElementById('recipientsInput').value.trim();
+            if (!input || !contract) {
+                document.getElementById('error').innerText = "Connect wallet and enter recipients!";
+                return;
+            }
+
+            try {
+                const lines = input.split('\n');
+                const recipients = [];
+                const amounts = [];
+                let totalVery = 0;
+
+                for (let line of lines) {
+                    const [address, amount] = line.split(',');
+                    if (!ethers.utils.isAddress(address) || !amount) throw new Error("Invalid format");
+                    recipients.push(address);
+                    const amountWei = ethers.utils.parseEther(amount.trim());
+                    amounts.push(amountWei);
+                    totalVery += parseFloat(amount);
+                }
+
+                document.getElementById('status').innerText = "Sending transaction...";
+                document.getElementById('error').innerText = "";
+
+                const tx = await contract.multiSend(recipients, amounts, {
+                    value: ethers.utils.parseEther(totalVery.toString())
+                });
+                await tx.wait();
+
+                document.getElementById('status').innerText = "Transaction successful! Check veryscan.io";
+            } catch (error) {
+                document.getElementById('error').innerText = "Error: " + error.message;
+                document.getElementById('status').innerText = "";
+            }
+        }
+    </script>
+</body>
+</html>
