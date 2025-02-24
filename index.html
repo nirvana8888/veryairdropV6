@@ -3,41 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Very Network Multisender</title>
+    <title>Very Multisender</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
-        button { padding: 10px 20px; margin: 5px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
-        button:hover { background-color: #45a049; }
-        textarea { width: 80%; height: 100px; margin: 10px 0; }
-        input[type="number"] { width: 200px; padding: 5px; margin: 10px 0; }
-        #status { color: green; margin-top: 10px; }
-        #error { color: red; margin-top: 10px; }
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        textarea {
+            width: 90%;
+            max-width: 500px;
+            height: 150px;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        input[type="number"] {
+            width: 150px;
+            padding: 8px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        #status {
+            color: #28a745;
+            margin-top: 10px;
+        }
+        #error {
+            color: #dc3545;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-    <h1>Very Network Multisender</h1>
-    <p>Connect your wallet and send the same amount of $VERY to multiple addresses!</p>
+    <h1>Very Multisender</h1>
+    <p>Send equal amounts of $VERY to multiple addresses on Very Network</p>
 
-    <button id="connectButton" onclick="connectWallet()">Connect Wallet</button>
-    <p>Connected Address: <span id="account">Not connected</span></p>
+    <button onclick="connectWallet()">Connect MetaMask</button>
+    <p>Wallet: <span id="walletAddress">Not connected</span></p>
 
-    <h3>Enter Recipients</h3>
-    <p>One address per line<br>Example:<br>0x123...abc<br>0x456...def</p>
-    <textarea id="recipientsInput" placeholder="0xAddress1
-0xAddress2"></textarea>
+    <h3>Recipients</h3>
+    <p>Enter one address per line</p>
+    <textarea id="recipients" placeholder="0xAddress1&#10;0xAddress2&#10;0xAddress3"></textarea>
 
-    <h3>Amount to Send to Each Address</h3>
-    <input type="number" id="amountInput" step="0.01" placeholder="Enter amount in $VERY (e.g., 1.5)" />
+    <h3>Amount per Address ($VERY)</h3>
+    <input type="number" id="amount" step="0.001" min="0" placeholder="e.g., 1.5">
+
     <br>
-    <button onclick="sendVery()">Send $VERY</button>
+    <button onclick="sendEqualVery()">Send $VERY</button>
 
     <p id="status"></p>
     <p id="error"></p>
 
-    <!-- Load ethers.js from jsDelivr -->
+    <!-- Load ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script>
-        const contractAddress = "0x39abbd8be6205a4a5a7671a7424c743851c9a2e9"; // Your deployed contract address on Chain ID 4613
+        // Contract details
+        const contractAddress = "0x39abbd8be6205a4a5a7671a7424c743851c9a2e9";
         const contractABI = [
             {
                 "inputs": [
@@ -48,121 +87,119 @@
                 "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
                 "stateMutability": "payable",
                 "type": "function"
-            },
-            {"anonymous": false, "inputs": [
-                {"indexed": true, "internalType": "address", "name": "to", "type": "address"},
-                {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"}
-            ], "name": "Sent", "type": "event"}
+            }
         ];
 
         let provider, signer, contract;
 
         async function connectWallet() {
-            if (window.ethereum && window.ethereum.isMetaMask) {
-                try {
-                    // Request wallet connection
-                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const status = document.getElementById('status');
+            const error = document.getElementById('error');
+            const walletAddress = document.getElementById('walletAddress');
 
-                    // Define Very Network (Chain ID 4613)
-                    const expectedChainId = '0x120d'; // 4613 in hex
-                    const veryNetwork = {
-                        chainId: expectedChainId,
-                        chainName: "Very Network",
-                        rpcUrls: ["https://rpc.verylabs.io"],
-                        nativeCurrency: {
-                            name: "VERY",
-                            symbol: "VERY",
-                            decimals: 18
-                        },
-                        blockExplorerUrls: ["https://www.veryscan.io"]
-                    };
-
-                    // Get current Chain ID
-                    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-                    console.log('Current Chain ID:', currentChainId, 'Decimal:', parseInt(currentChainId, 16));
-
-                    // Switch or add network if mismatch
-                    if (currentChainId !== expectedChainId) {
-                        try {
-                            await window.ethereum.request({
-                                method: 'wallet_switchEthereumChain',
-                                params: [{ chainId: expectedChainId }]
-                            });
-                        } catch (switchError) {
-                            if (switchError.code === 4902) { // Network not found
-                                await window.ethereum.request({
-                                    method: 'wallet_addEthereumChain',
-                                    params: [veryNetwork]
-                                });
-                            } else {
-                                throw switchError;
-                            }
-                        }
-                        // Re-check Chain ID after switch
-                        const newChainId = await window.ethereum.request({ method: 'eth_chainId' });
-                        console.log('New Chain ID after switch:', newChainId, 'Decimal:', parseInt(newChainId, 16));
-                        if (newChainId !== expectedChainId) {
-                            throw new Error(`Chain ID mismatch: expected ${expectedChainId}, got ${newChainId}`);
-                        }
-                    }
-
-                    // Initialize provider
-                    provider = new ethers.providers.Web3Provider(window.ethereum);
-                    signer = provider.getSigner();
-                    contract = new ethers.Contract(contractAddress, contractABI, signer);
-
-                    const account = await signer.getAddress();
-                    document.getElementById('account').innerText = account;
-                    document.getElementById('status').innerText = "Wallet connected!";
-                    document.getElementById('error').innerText = "";
-                } catch (error) {
-                    document.getElementById('error').innerText = "Connection failed: " + error.message;
-                }
-            } else {
-                document.getElementById('error').innerText = "Please install MetaMask!";
-            }
-        }
-
-        async function sendVery() {
-            const recipientsInput = document.getElementById('recipientsInput').value.trim();
-            const amountInput = document.getElementById('amountInput').value.trim();
-
-            if (!recipientsInput || !amountInput || !contract) {
-                document.getElementById('error').innerText = "Connect wallet, enter recipients, and specify an amount!";
+            if (!window.ethereum) {
+                error.textContent = "MetaMask is not installed!";
                 return;
             }
 
             try {
-                const lines = recipientsInput.split('\n').filter(line => line.trim() !== '');
-                const recipients = [];
-                const amount = parseFloat(amountInput);
+                // Very Network config (Chain ID 4613)
+                const veryChainId = '0x120d'; // 4613 in hex
+                const veryNetwork = {
+                    chainId: veryChainId,
+                    chainName: "Very Network",
+                    rpcUrls: ["https://rpc.verylabs.io"],
+                    nativeCurrency: { name: "VERY", symbol: "VERY", decimals: 18 },
+                    blockExplorerUrls: ["https://www.veryscan.io"]
+                };
 
-                if (amount <= 0 || isNaN(amount)) throw new Error("Amount must be a positive number");
+                // Request accounts and check Chain ID
+                await window.ethereum.request({ method: 'eth_requestAccounts' });
+                const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                console.log(`Current Chain ID: ${currentChainId} (Decimal: ${parseInt(currentChainId, 16)})`);
 
-                for (let line of lines) {
-                    const address = line.trim();
-                    if (!ethers.utils.isAddress(address)) throw new Error(`Invalid address: ${address}`);
-                    recipients.push(address);
+                // Switch to Chain ID 4613 if needed
+                if (currentChainId !== veryChainId) {
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: veryChainId }]
+                        });
+                    } catch (switchError) {
+                        if (switchError.code === 4902) {
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [veryNetwork]
+                            });
+                        } else {
+                            throw switchError;
+                        }
+                    }
+                    const newChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                    console.log(`Switched Chain ID: ${newChainId} (Decimal: ${parseInt(newChainId, 16)})`);
+                    if (newChainId !== veryChainId) {
+                        throw new Error(`Failed to switch to Chain ID 4613, got ${newChainId}`);
+                    }
                 }
 
-                if (recipients.length === 0) throw new Error("No valid recipients provided");
+                // Set up provider and contract
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                contract = new ethers.Contract(contractAddress, contractABI, signer);
 
-                // Create amounts array with the same value for each recipient
-                const amounts = recipients.map(() => ethers.utils.parseEther(amount.toString()));
-                const totalVery = amount * recipients.length;
+                const address = await signer.getAddress();
+                walletAddress.textContent = address;
+                status.textContent = "Connected to Very Network!";
+                error.textContent = "";
+            } catch (err) {
+                error.textContent = `Error: ${err.message}`;
+                status.textContent = "";
+            }
+        }
 
-                document.getElementById('status').innerText = "Sending transaction...";
-                document.getElementById('error').innerText = "";
+        async function sendEqualVery() {
+            const status = document.getElementById('status');
+            const error = document.getElementById('error');
+            const recipientsInput = document.getElementById('recipients').value.trim();
+            const amountInput = document.getElementById('amount').value.trim();
 
-                const tx = await contract.multiSend(recipients, amounts, {
-                    value: ethers.utils.parseEther(totalVery.toString())
+            if (!contract) {
+                error.textContent = "Please connect your wallet first!";
+                return;
+            }
+            if (!recipientsInput || !amountInput) {
+                error.textContent = "Enter recipients and an amount!";
+                return;
+            }
+
+            try {
+                const recipientList = recipientsInput.split('\n').map(line => line.trim()).filter(line => line);
+                const amount = parseFloat(amountInput);
+
+                if (recipientList.length === 0) throw new Error("No recipients provided");
+                if (isNaN(amount) || amount <= 0) throw new Error("Amount must be a positive number");
+
+                // Validate addresses
+                const recipients = recipientList.map(address => {
+                    if (!ethers.utils.isAddress(address)) throw new Error(`Invalid address: ${address}`);
+                    return address;
                 });
+
+                // Create equal amounts array
+                const amounts = recipients.map(() => ethers.utils.parseEther(amount.toString()));
+                const totalVery = ethers.utils.parseEther((amount * recipients.length).toString());
+
+                status.textContent = "Sending $VERY...";
+                error.textContent = "";
+
+                const tx = await contract.multiSend(recipients, amounts, { value: totalVery });
                 await tx.wait();
 
-                document.getElementById('status').innerText = "Transaction successful! Check veryscan.io";
-            } catch (error) {
-                document.getElementById('error').innerText = "Error: " + error.message;
-                document.getElementById('status').innerText = "";
+                status.textContent = "Success! Check veryscan.io for details.";
+                error.textContent = "";
+            } catch (err) {
+                error.textContent = `Error: ${err.message}`;
+                status.textContent = "";
             }
         }
     </script>
