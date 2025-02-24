@@ -58,7 +58,39 @@
                 try {
                     // Request wallet connection
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    provider = new ethers.providers.Web3Provider(window.ethereum);
+
+                    // Define Very Network
+                    const veryNetwork = {
+                        chainId: 4613,
+                        name: "Very Network",
+                        rpcUrls: ["https://rpc.verylabs.io"],
+                        nativeCurrency: {
+                            name: "VERY",
+                            symbol: "VERY",
+                            decimals: 18
+                        },
+                        blockExplorerUrls: ["https://www.veryscan.io"]
+                    };
+
+                    // Switch to Very Network (if not already on it)
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x1201' }] // 4613 in hex
+                    }).catch(async (switchError) => {
+                        if (switchError.code === 4902) {
+                            // Network not added to MetaMask, add it
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [veryNetwork]
+                            });
+                        }
+                    });
+
+                    // Create provider with explicit network
+                    provider = new ethers.providers.Web3Provider(window.ethereum, {
+                        chainId: 4613,
+                        name: "very"
+                    });
                     signer = provider.getSigner();
                     contract = new ethers.Contract(contractAddress, contractABI, signer);
 
