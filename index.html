@@ -9,21 +9,25 @@
         button { padding: 10px 20px; margin: 5px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         button:hover { background-color: #45a049; }
         textarea { width: 80%; height: 100px; margin: 10px 0; }
+        input[type="number"] { width: 200px; padding: 5px; margin: 10px 0; }
         #status { color: green; margin-top: 10px; }
         #error { color: red; margin-top: 10px; }
     </style>
 </head>
 <body>
     <h1>Very Network Multisender</h1>
-    <p>Connect your wallet and send $VERY to multiple addresses!</p>
+    <p>Connect your wallet and send the same amount of $VERY to multiple addresses!</p>
 
     <button id="connectButton" onclick="connectWallet()">Connect Wallet</button>
     <p>Connected Address: <span id="account">Not connected</span></p>
 
-    <h3>Enter Recipients and Amounts</h3>
-    <p>Format: address,amount (in VERY, one per line)<br>Example: 0x123...abc,1.5</p>
-    <textarea id="recipientsInput" placeholder="0xAddress1,1.5
-0xAddress2,2.0"></textarea>
+    <h3>Enter Recipients</h3>
+    <p>One address per line<br>Example:<br>0x123...abc<br>0x456...def</p>
+    <textarea id="recipientsInput" placeholder="0xAddress1
+0xAddress2"></textarea>
+
+    <h3>Amount to Send to Each Address</h3>
+    <input type="number" id="amountInput" step="0.01" placeholder="Enter amount in $VERY (e.g., 1.5)" />
     <br>
     <button onclick="sendVery()">Send $VERY</button>
 
@@ -59,10 +63,10 @@
                     // Request wallet connection
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-                    // Define Very Network with correct Chain ID 4613 (0x120d)
-                    const veryChainId = '0x120d'; // 4613 in hex
+                    // Define Very Network (expected Chain ID 4613)
+                    const expectedChainId = '0x120d'; // 4613 in hex
                     const veryNetwork = {
-                        chainId: veryChainId,
+                        chainId: expectedChainId,
                         chainName: "Very Network",
                         rpcUrls: ["https://rpc.verylabs.io"],
                         nativeCurrency: {
@@ -73,13 +77,16 @@
                         blockExplorerUrls: ["https://www.veryscan.io"]
                     };
 
-                    // Check current chain and switch if needed
+                    // Get current Chain ID
                     const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-                    if (currentChainId !== veryChainId) {
+                    console.log('Current Chain ID:', currentChainId, 'Decimal:', parseInt(currentChainId, 16));
+
+                    // Switch or add network if mismatch
+                    if (currentChainId !== expectedChainId) {
                         try {
                             await window.ethereum.request({
                                 method: 'wallet_switchEthereumChain',
-                                params: [{ chainId: veryChainId }]
+                                params: [{ chainId: expectedChainId }]
                             });
                         } catch (switchError) {
                             if (switchError.code === 4902) { // Network not found
@@ -91,9 +98,15 @@
                                 throw switchError;
                             }
                         }
+                        // Re-check Chain ID after switch
+                        const newChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                        console.log('New Chain ID after switch:', newChainId, 'Decimal:', parseInt(newChainId, 16));
+                        if (newChainId !== expectedChainId) {
+                            throw new Error(`Chain ID mismatch: expected ${expectedChainId}, got ${newChainId}`);
+                        }
                     }
 
-                    // Initialize provider without network object
+                    // Initialize provider
                     provider = new ethers.providers.Web3Provider(window.ethereum);
                     signer = provider.getSigner();
                     contract = new ethers.Contract(contractAddress, contractABI, signer);
@@ -111,26 +124,32 @@
         }
 
         async function sendVery() {
-            const input = document.getElementById('recipientsInput').value.trim();
-            if (!input || !contract) {
-                document.getElementById('error').innerText = "Connect wallet and enter recipients!";
+            const recipientsInput = document.getElementById('recipientsInput').value.trim();
+            const amountInput = document.getElementById('amountInput').value.trim();
+
+            if (!recipientsInput || !amountInput || !contract) {
+                document.getElementById('error').innerText = "Connect wallet, enter recipients, and specify an amount!";
                 return;
             }
 
             try {
-                const lines = input.split('\n');
+                const lines = recipientsInput.split('\n').filter(line => line.trim() !== '');
                 const recipients = [];
-                const amounts = [];
-                let totalVery = 0;
+                const amount = parseFloat(amountInput);
+
+                if (amount <= 0 || isNaN(amount)) throw new Error("Amount must be a positive number");
 
                 for (let line of lines) {
-                    const [address, amount] = line.split(',');
-                    if (!ethers.utils.isAddress(address) || !amount) throw new Error("Invalid format");
+                    const address = line.trim();
+                    if (!ethers.utils.isAddress(address)) throw new Error(`Invalid address: ${address}`);
                     recipients.push(address);
-                    const amountWei = ethers.utils.parseEther(amount.trim());
-                    amounts.push(amountWei);
-                    totalVery += parseFloat(amount);
                 }
+
+                if (recipients.length === 0) throw new Error("No valid recipients provided");
+
+                // Create amounts array with the same value for each recipient
+                const amounts = recipients.map(() => ethers.utils.parseEther(amount.toString()));
+                const totalVery = amount * recipients.length;
 
                 document.getElementById('status').innerText = "Sending transaction...";
                 document.getElementById('error').innerText = "";
