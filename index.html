@@ -54,14 +54,15 @@
         let provider, signer, contract;
 
         async function connectWallet() {
-            if (typeof window.ethereum !== 'undefined') {
+            if (window.ethereum && window.ethereum.isMetaMask) {
                 try {
                     // Request wallet connection
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
 
                     // Define Very Network
+                    const veryChainId = '0x1201'; // 4613 in hex
                     const veryNetwork = {
-                        chainId: '0x1201', // 4613 in hex
+                        chainId: veryChainId,
                         chainName: "Very Network",
                         rpcUrls: ["https://rpc.verylabs.io"],
                         nativeCurrency: {
@@ -72,20 +73,25 @@
                         blockExplorerUrls: ["https://www.veryscan.io"]
                     };
 
-                    // Switch to Very Network
-                    await window.ethereum.request({
-                        method: 'wallet_switchEthereumChain',
-                        params: [{ chainId: veryNetwork.chainId }]
-                    }).catch(async (switchError) => {
-                        if (switchError.code === 4902) { // Network not found
+                    // Check current chain and switch if needed
+                    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                    if (currentChainId !== veryChainId) {
+                        try {
                             await window.ethereum.request({
-                                method: 'wallet_addEthereumChain',
-                                params: [veryNetwork]
+                                method: 'wallet_switchEthereumChain',
+                                params: [{ chainId: veryChainId }]
                             });
-                        } else {
-                            throw switchError;
+                        } catch (switchError) {
+                            if (switchError.code === 4902) { // Network not found
+                                await window.ethereum.request({
+                                    method: 'wallet_addEthereumChain',
+                                    params: [veryNetwork]
+                                });
+                            } else {
+                                throw switchError;
+                            }
                         }
-                    });
+                    }
 
                     // Initialize provider without network object
                     provider = new ethers.providers.Web3Provider(window.ethereum);
