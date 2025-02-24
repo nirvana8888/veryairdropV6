@@ -33,7 +33,7 @@
     <!-- Load ethers.js from jsDelivr -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script>
-        const contractAddress = "0x39abbd8be6205a4a5a7671a7424c743851c9a2e9"; // Replace with your deployed contract address
+        const contractAddress = "0x39abbd8be6205a4a5a7671a7424c743851c9a2e9"; // Your deployed contract address
         const contractABI = [
             {
                 "inputs": [
@@ -59,8 +59,8 @@
                     // Request wallet connection
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-                    // Define Very Network
-                    const veryChainId = '0x1201'; // 4613 in hex
+                    // Define Very Network with correct Chain ID 4613 (0x120d)
+                    const veryChainId = '0x120d'; // 4613 in hex
                     const veryNetwork = {
                         chainId: veryChainId,
                         chainName: "Very Network",
